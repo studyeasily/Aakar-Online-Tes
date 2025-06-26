@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Student Test Portal</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; max-width: 800px; }
+        .question { border: 1px solid #ddd; padding: 15px; margin: 15px 0; background: #f9f9f9; }
+        .options { margin-left: 20px; }
+        .option { margin: 8px 0; }
+        #studentInfo { background: #e7f3fe; padding: 15px; margin-bottom: 20px; }
+        #resultDisplay { display: none; background: #e8f5e9; padding: 20px; }
+        .correct { color: green; }
+        .incorrect { color: red; }
+    </style>
+</head>
+<body>
+    <div id="testContainer">
+        <h1 id="testTitle">Loading Test...</h1>
+        
+        <div id="studentInfo">
+            <h2>Enter Your Information</h2>
+            <label>Full Name: <input type="text" id="studentName" required></label>
+            <button onclick="startTest()">Begin Test</button>
+        </div>
+        
+        <form id="testForm" style="display:none;">
+            <div id="questionsList"></div>
+            <button type="submit">Submit Test</button>
+        </form>
+        
+        <div id="resultDisplay">
+            <h2>Test Submitted</h2>
+            <p>Correct Answers: <span id="correctCount" class="correct">0</span></p>
+            <p>Wrong Answers: <span id="wrongCount" class="incorrect">0</span></p>
+            <p>Net Score: <span id="netScore">0</span></p>
+        </div>
+    </div>
+
+    <script>
+        // Get test ID from URL
+        const urlParams = new URLSearchParams(window.location.search);
+        const testId = urlParams.get('test');
+        
+        // Load test
+        function loadTest() {
+            if (!testId) {
+                document.getElementById('testTitle').textContent = 'Error: No Test Specified';
+                return;
+            }
+            
+            const tests = JSON.parse(localStorage.getItem('tests') || '{}');
+            const test = tests[testId];
+            
+            if (!test) {
+                document.getElementById('testTitle').textContent = 'Error: Test Not Found';
+                return;
+            }
+            
+            document.getElementById('testTitle').textContent = test.name;
+            window.currentTest = test;
+        }
+        
+        // Start test
+        function startTest() {
+            const studentName = document.getElementById('studentName').value.trim();
+            if (!studentName) {
+                alert('Please enter your name');
+                return;
+            }
+            
+            window.studentName = studentName;
+            document.getElementById('studentInfo').style.display = 'none';
+            document.getElementById('testForm').style.display = 'block';
+            
+            // Display questions
+            const questionsList = document.getElementById('questionsList');
+            questionsList.innerHTML = '';
+            
+            currentTest.questions.forEach((q, i) => {
+                const questionDiv = document.createElement('div');
+                questionDiv.className = 'question';
+                questionDiv.innerHTML = `
+                    <h3>Question ${i+1}</h3>
+                    <p>${q.text}</p>
+                    <div class="options">
+                        <div class="option">
+                            <input type="radio" name="q${i}" id="q${i}_A" value="A" required>
+                            <label for="q${i}_A">A) ${q.options.A}</label>
+                        </div>
+                        <div class="option">
+                            <input type="radio" name="q${i}" id="q${i}_B" value="B">
+                            <label for="q${i}_B">B) ${q.options.B}</label>
+                        </div>
+                        <div class="option">
+                            <input type="radio" name="q${i}" id="q${i}_C" value="C">
+                            <label for="q${i}_C">C) ${q.options.C}</label>
+                        </div>
+                        <div class="option">
+                            <input type="radio" name="q${i}" id="q${i}_D" value="D">
+                            <label for="q${i}_D">D) ${q.options.D}</label>
+                        </div>
+                    </div>
+                `;
+                questionsList.appendChild(questionDiv);
+            });
+        }
+        
+        // Submit test
+        document.getElementById('testForm').addEventListener('submit', function(e) {
+            e.preventDefault();
+            
+            const answers = [];
+            let correctCount = 0;
+            
+            currentTest.questions.forEach((q, i) => {
+                const selected = document.querySelector(`input[name="q${i}"]:checked`);
+                const answer = selected ? selected.value : null;
+                const isCorrect = answer === q.correct;
+                
+                if (isCorrect) correctCount++;
+                
+                answers.push({
+                    question: q.text,
+                    answer: answer,
+                    isCorrect: isCorrect,
+                    correctAnswer: q.correct
+                });
+            });
+            
+            const wrongCount = currentTest.questions.length - correctCount;
+            const netScore = correctCount - wrongCount;
+            
+            // Display results
+            document.getElementById('testForm').style.display = 'none';
+            document.getElementById('resultDisplay').style.display = 'block';
+            document.getElementById('correctCount').textContent = correctCount;
+            document.getElementById('wrongCount').textContent = wrongCount;
+            document.getElementById('netScore').textContent = netScore;
+            
+            // Save results
+            saveResults(answers, correctCount);
+        });
+        
+        // Save results to localStorage
+        function saveResults(answers, correctCount) {
+            const results = JSON.parse(localStorage.getItem('results') || '{}');
+            
+            if (!results[testId]) {
+                results[testId] = [];
+            }
+            
+            // Check if student already submitted
+            const existingIndex = results[testId].findIndex(r => r.studentName === window.studentName);
+            const resultData = {
+                studentName: window.studentName,
+                answers: answers,
+                score: correctCount,
+                submitted: new Date().toISOString()
+            };
+            
+            if (existingIndex >= 0) {
+                results[testId][existingIndex] = resultData;
+            } else {
+                results[testId].push(resultData);
+            }
+            
+            localStorage.setItem('results', JSON.stringify(results));
+        }
+        
+        // Initialize
+        window.onload = loadTest;
+    </script>
+</body>
+</html>

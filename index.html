@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Teacher Portal - Test Manager</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .tab { overflow: hidden; border: 1px solid #ccc; background: #f1f1f1; }
+        .tab button { background: inherit; float: left; border: none; padding: 10px 16px; cursor: pointer; }
+        .tab button:hover { background: #ddd; }
+        .tab button.active { background: #4CAF50; color: white; }
+        .tabcontent { display: none; padding: 20px; border: 1px solid #ccc; border-top: none; }
+        .active-tab { display: block; }
+        .question-item { border: 1px solid #ddd; padding: 15px; margin: 10px 0; background: #f9f9f9; }
+        table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+        th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+        th { background-color: #4CAF50; color: white; }
+        .test-link { background: #e7f3fe; padding: 10px; border-left: 4px solid #2196F3; margin: 10px 0; }
+        .correct { color: green; }
+        .incorrect { color: red; }
+    </style>
+</head>
+<body>
+    <h1>Teacher Test Portal</h1>
+    
+    <div class="tab">
+        <button class="tablinks active" onclick="openTab(event, 'createTest')">Create Test</button>
+        <button class="tablinks" onclick="openTab(event, 'viewResults')">View Results</button>
+    </div>
+    
+    <!-- Create Test Tab -->
+    <div id="createTest" class="tabcontent active-tab">
+        <h2>Create New Test</h2>
+        <div>
+            <label>Test Name: <input type="text" id="testName" required></label>
+        </div>
+        <div id="questionsContainer"></div>
+        <button onclick="addQuestion()">➕ Add Question</button>
+        <button onclick="generateTest()">Generate Test Link</button>
+        <div id="testLinkContainer" style="display:none;">
+            <h3>Test Link:</h3>
+            <div class="test-link" id="testLink"></div>
+            <button onclick="copyLink()">Copy Link</button>
+        </div>
+    </div>
+    
+    <!-- View Results Tab -->
+    <div id="viewResults" class="tabcontent">
+        <h2>Student Results</h2>
+        <div id="resultsContainer">
+            <table id="resultsTable">
+                <thead>
+                    <tr>
+                        <th>Student Name</th>
+                        <th>Attempted</th>
+                        <th>Correct</th>
+                        <th>Wrong</th>
+                        <th>Net Score</th>
+                        <th>Details</th>
+                    </tr>
+                </thead>
+                <tbody id="resultsBody"></tbody>
+            </table>
+        </div>
+    </div>
+
+    <script>
+        // Global variables
+        let currentTestId = null;
+        const tests = JSON.parse(localStorage.getItem('tests') || '{}');
+        const results = JSON.parse(localStorage.getItem('results') || '{}');
+        
+        // Tab functionality
+        function openTab(evt, tabName) {
+            const tabcontent = document.getElementsByClassName("tabcontent");
+            for (let i = 0; i < tabcontent.length; i++) {
+                tabcontent[i].style.display = "none";
+            }
+            const tablinks = document.getElementsByClassName("tablinks");
+            for (let i = 0; i < tablinks.length; i++) {
+                tablinks[i].className = tablinks[i].className.replace(" active", "");
+            }
+            document.getElementById(tabName).style.display = "block";
+            evt.currentTarget.className += " active";
+            
+            if (tabName === 'viewResults') {
+                loadResults();
+            }
+        }
+        
+        // Add question manually
+        function addQuestion() {
+            const count = document.querySelectorAll('.question-item').length + 1;
+            const html = `
+                <div class="question-item" data-id="${count}">
+                    <h3>Question ${count}</h3>
+                    <textarea placeholder="Question text" rows="2" style="width:100%" required></textarea><br>
+                    <input type="text" placeholder="Option A" style="width:80%" required><br>
+                    <input type="text" placeholder="Option B" style="width:80%" required><br>
+                    <input type="text" placeholder="Option C" style="width:80%" required><br>
+                    <input type="text" placeholder="Option D" style="width:80%" required><br>
+                    Correct Answer: 
+                    <select required>
+                        <option value="">Select</option>
+                        <option value="A">A</option>
+                        <option value="B">B</option>
+                        <option value="C">C</option>
+                        <option value="D">D</option>
+                    </select>
+                    <button onclick="this.parentNode.remove(); renumberQuestions()">❌ Remove</button>
+                </div>
+            `;
+            document.getElementById('questionsContainer').insertAdjacentHTML('beforeend', html);
+        }
+        
+        // Renumber questions after deletion
+        function renumberQuestions() {
+            const questions = document.querySelectorAll('.question-item');
+            questions.forEach((q, i) => {
+                q.setAttribute('data-id', i+1);
+                q.querySelector('h3').textContent = `Question ${i+1}`;
+            });
+        }
+        
+        // Generate test and shareable link
+        function generateTest() {
+            const testName = document.getElementById('testName').value;
+            if (!testName) {
+                alert('Please enter a test name');
+                return;
+            }
+            
+            const questionItems = document.querySelectorAll('.question-item');
+            if (questionItems.length === 0) {
+                alert('Please add at least one question');
+                return;
+            }
+            
+            const testQuestions = [];
+            questionItems.forEach(q => {
+                testQuestions.push({
+                    text: q.querySelector('textarea').value,
+                    options: {
+                        A: q.querySelector('input:nth-of-type(1)').value,
+                        B: q.querySelector('input:nth-of-type(2)').value,
+                        C: q.querySelector('input:nth-of-type(3)').value,
+                        D: q.querySelector('input:nth-of-type(4)').value
+                    },
+                    correct: q.querySelector('select').value
+                });
+            });
+            
+            // Create test ID
+            currentTestId = 'test_' + Date.now();
+            
+            // Save test
+            tests[currentTestId] = {
+                name: testName,
+                questions: testQuestions,
+                created: new Date().toISOString()
+            };
+            localStorage.setItem('tests', JSON.stringify(tests));
+            
+            // Generate link
+            const studentLink = window.location.href.replace('teacher.html', 'student.html') + '?test=' + currentTestId;
+            document.getElementById('testLink').textContent = studentLink;
+            document.getElementById('testLinkContainer').style.display = 'block';
+            
+            // Reset form
+            document.getElementById('questionsContainer').innerHTML = '';
+            document.getElementById('testName').value = '';
+        }
+        
+        // Copy test link
+        function copyLink() {
+            const link = document.getElementById('testLink').textContent;
+            navigator.clipboard.writeText(link).then(() => {
+                alert('Link copied to clipboard!');
+            });
+        }
+        
+        // Load and display results
+        function loadResults() {
+            const tbody = document.getElementById('resultsBody');
+            tbody.innerHTML = '';
+            
+            for (const testId in results) {
+                if (!results.hasOwnProperty(testId)) continue;
+                
+                const testResults = results[testId];
+                const testInfo = tests[testId];
+                
+                testResults.forEach(result => {
+                    const correct = result.answers.filter(a => a.isCorrect).length;
+                    const wrong = result.answers.length - correct;
+                    const netScore = correct - wrong;
+                    
+                    const row = document.createElement('tr');
+                    row.innerHTML = `
+                        <td>${result.studentName}</td>
+                        <td>${result.answers.length}</td>
+                        <td class="correct">${correct}</td>
+                        <td class="incorrect">${wrong}</td>
+                        <td>${netScore}</td>
+                        <td><button onclick="viewDetails('${testId}', '${result.studentName}')">View</button></td>
+                    `;
+                    tbody.appendChild(row);
+                });
+            }
+        }
+        
+        // View detailed results
+        function viewDetails(testId, studentName) {
+            const testResults = results[testId];
+            const studentResult = testResults.find(r => r.studentName === studentName);
+            const test = tests[testId];
+            
+            let details = `<h3>Detailed Results for ${studentName}</h3>`;
+            details += `<p>Test: ${test.name}</p>`;
+            details += `<table><tr><th>Question</th><th>Answer</th><th>Correct</th><th>Result</th></tr>`;
+            
+            studentResult.answers.forEach((answer, i) => {
+                const question = test.questions[i];
+                const isCorrect = answer.answer === question.correct;
+                
+                details += `<tr>
+                    <td>${question.text}</td>
+                    <td>${answer.answer} (${question.options[answer.answer]})</td>
+                    <td>${question.correct} (${question.options[question.correct]})</td>
+                    <td class="${isCorrect ? 'correct' : 'incorrect'}">${isCorrect ? '✓' : '✗'}</td>
+                </tr>`;
+            });
+            
+            details += `</table><button onclick="loadResults()">Back to Results</button>`;
+            document.getElementById('resultsContainer').innerHTML = details;
+        }
+    </script>
+</body>
+</html>
